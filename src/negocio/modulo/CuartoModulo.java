@@ -2,41 +2,131 @@ package negocio.modulo;
 
 import modelo.Cuarto;
 import modelo.Paciente;
+import modelo.enums.EstadoCuarto;
+import negocio.Hospital;
+
+import java.time.Duration;
+import java.time.LocalDateTime;
+
 
 public class CuartoModulo {
 
     // --- RF2.1: Gestión CRUD de Cuartos ---
     public boolean registrarCuarto(Cuarto nuevoCuarto) {
-        // (Módulo 2): Validar código único y agregar a HospitalDataStore.cuartos.
-        return false;
+        if (nuevoCuarto == null || nuevoCuarto.getCodigo() == null || nuevoCuarto.getCodigo().trim().isEmpty()) {
+            return false;
+        }
+
+        for (Cuarto cuarto : Hospital.cuartos) {
+            if (cuarto.getCodigo().equalsIgnoreCase(nuevoCuarto.getCodigo())) {
+                return false;
+            }
+        }
+
+        Hospital.cuartos.add(nuevoCuarto);
+        return true;
     }
 
     public Cuarto buscarCuartoDisponible(String tipoArea) {
-        // (Módulo 2): Retornar el primer cuarto con estado DISPONIBLE del tipo solicitado.
+        if (tipoArea == null) {
+            return null;
+        }
+
+        for (Cuarto cuarto : Hospital.cuartos) {
+            if (cuarto.getEstado() == EstadoCuarto.DISPONIBLE && cuarto.getTipoArea().equalsIgnoreCase(tipoArea)) {
+                return cuarto;
+            }
+        }
         return null;
     }
 
     public boolean eliminarCuarto(String codigo) {
-        // (Módulo 2): Eliminar solo si estado != EstadoCuarto.OCUPADO.
+        for (Cuarto cuarto : Hospital.cuartos) {
+            if (cuarto.getCodigo().equalsIgnoreCase(codigo) && cuarto.getEstado() != EstadoCuarto.OCUPADO) {
+                Hospital.cuartos.remove(cuarto);
+                return true;
+            }
+        }
         return false;
     }
 
     // --- RF2.2: Control de Estados y Doble Validación de Desinfección ---
     public boolean asignarPacienteACuarto(String codigoCuarto, Paciente paciente) {
-        // (Módulo 2): Verificar EstadoCuarto.DISPONIBLE, asignar paciente y cambiar a OCUPADO.
+        if (paciente == null || codigoCuarto == null) {
+            return false;
+        }
+
+        for (Cuarto cuarto : Hospital.cuartos) {
+            if (cuarto.getCodigo().equalsIgnoreCase(codigoCuarto) && cuarto.getEstado() == EstadoCuarto.DISPONIBLE) {
+                cuarto.setPacienteAsignado(paciente);
+                cuarto.setEstado(EstadoCuarto.OCUPADO);
+                return true;
+            }
+        }
         return false;
     }
 
     public void iniciarDesinfeccion(String codigoCuarto) {
-        // (Módulo 2): Liberar paciente, cambiar a EN_DESINFECCION, guardar LocalDateTime.now()
-        // y poner limpiezaConfirmada = false.
+        if (codigoCuarto == null) {
+            return;
+        }
+
+        for (Cuarto cuarto : Hospital.cuartos) {
+            if (cuarto.getCodigo().equalsIgnoreCase(codigoCuarto) && cuarto.getEstado() == EstadoCuarto.OCUPADO) {
+                cuarto.setPacienteAsignado(null);
+                cuarto.setEstado(EstadoCuarto.EN_DESINFECCION);
+                cuarto.setInicioDesinfeccion(LocalDateTime.now());
+                cuarto.setLimpiezaConfirmada(false);
+                return;
+            }
+        }
     }
 
     public boolean intentarLiberarCuarto(String codigoCuarto, boolean confirmacionManualPersonal) {
-        // (Módulo 2): Verificar doble condición:
-        // 1. Minutos transcurridos >= cuarto.getTiempoDesinfeccionMinutos()
-        // 2. confirmacionManualPersonal == true
-        // Si ambas se cumplen, pasar a EstadoCuarto.DISPONIBLE.
+
+        if (codigoCuarto == null || !confirmacionManualPersonal) {
+            return false;
+        }
+
+        for (Cuarto cuarto : Hospital.cuartos) {
+
+            if (cuarto.getCodigo().equalsIgnoreCase(codigoCuarto)) {
+
+                if (cuarto.getEstado() != EstadoCuarto.EN_DESINFECCION) {
+                    System.out.println("El cuarto no está en desinfección.");
+                    return false;
+                }
+
+                if (cuarto.getInicioDesinfeccion() == null) {
+                    System.out.println("No se ha registrado el inicio de la desinfección.");
+                    return false;
+                }
+
+                long minutosTranscurridos = Duration.between(
+                        cuarto.getInicioDesinfeccion(),
+                        LocalDateTime.now()
+                ).toMinutes();
+
+                System.out.println("Minutos transcurridos: " + minutosTranscurridos);
+                System.out.println("Minutos necesarios: " + cuarto.getTiempoDesinfeccionMinutos());
+
+                if (minutosTranscurridos >= cuarto.getTiempoDesinfeccionMinutos()) {
+
+                    cuarto.setEstado(EstadoCuarto.DISPONIBLE);
+                    cuarto.setLimpiezaConfirmada(true);
+                    cuarto.setInicioDesinfeccion(null);
+
+                    return true;
+                } else {
+                    System.out.println("Todavía no termina el tiempo de desinfección.");
+                    return false;
+                }
+            }
+        }
+
+        System.out.println("No se encontró el cuarto.");
         return false;
     }
 }
+
+
