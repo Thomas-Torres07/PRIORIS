@@ -4,6 +4,7 @@ import negocio.Hospital;
 import negocio.modulo.*;
 import java.util.Scanner;
 
+
 public class Main {
     private static final TriajeModulo triajeModulo = new TriajeModulo();
     private static final CuartoModulo cuartoModulo = new CuartoModulo();
@@ -50,7 +51,93 @@ public class Main {
     }
 
     private static void menuAtencion() {
-        System.out.println("-> Submenú Atención: Iniciar Consulta / Emitir Receta / Dar Alta");
+        int subOpcion;
+        do {
+            System.out.println("\n--- SUBMENÚ ATENCIÓN MÉDICA Y RECETAS ---");
+            System.out.println("1. Iniciar nueva atención médica");
+            System.out.println("2. Consultar fichas clínicas / atenciones");
+            System.out.println("3. Actualizar notas de evolución");
+            System.out.println("4. Emitir receta médica (con validación de alergias)");
+            System.out.println("5. Anular receta emitida por error");
+            System.out.println("6. Cerrar atención y dar Alta Médica");
+            System.out.println("0. Volver al menú principal");
+
+            subOpcion = leerEntero("Seleccione una opción: ");
+
+            switch (subOpcion) {
+                case 1 -> {
+                    String idAtencion = leerTexto("Ingrese ID de la atención (ej. AT-01): ");
+                    String cedulaPac = leerTexto("Ingrese cédula del paciente: ");
+                    modelo.Paciente paciente = atencionModulo.buscarPacientePorCedula(cedulaPac);
+
+                    if (paciente == null) {
+                        System.out.println("Error: No se encontró ningún paciente registrado con esa cédula.");
+                        break;
+                    }
+
+                    modelo.PersonalMedico medico = atencionModulo.obtenerPrimerMedicoDisponible();
+                    modelo.Cuarto cuarto = atencionModulo.obtenerPrimerCuartoDisponible();
+
+                    if (medico == null || cuarto == null) {
+                        System.out.println("Alerta: No hay médicos o cuartos disponibles en este momento.");
+                        break;
+                    }
+
+                    atencionModulo.iniciarAtencion(idAtencion, paciente, medico, cuarto);
+                }
+                case 2 -> {
+                    if (Hospital.atenciones.isEmpty()) {
+                        System.out.println("No existen atenciones médicas registradas.");
+                    } else {
+                        for (modelo.AtencionMedica a : Hospital.atenciones) {
+                            System.out.println("ID: " + a.getIdAtencion()
+                                    + " | Paciente: " + a.getPaciente().getNombreCompleto()
+                                    + " | Médico: " + a.getMedico().getNombreCompleto()
+                                    + " | Estado: " + a.getEstadoAtencion()
+                                    + " | Diagnóstico: " + (a.getDiagnostico() != null ? a.getDiagnostico() : "Pendiente"));
+                        }
+                    }
+                }
+                case 3 -> {
+                    String idAtencion = leerTexto("Ingrese ID de la atención: ");
+                    String notas = leerTexto("Ingrese las notas de evolución médica: ");
+                    atencionModulo.actualizarNotasEvolucion(idAtencion, notas);
+                }
+                case 4 -> {
+                    String idAtencion = leerTexto("Ingrese ID de la atención: ");
+                    String idReceta = leerTexto("Ingrese ID de la receta (ej. REC-01): ");
+                    String indicaciones = leerTexto("Ingrese indicaciones generales: ");
+
+                    modelo.Receta nuevaReceta = new modelo.Receta(idReceta, indicaciones);
+
+                    int cantidadMeds = leerEntero("¿Cuántos medicamentos desea agregar a la receta?: ");
+                    for (int i = 1; i <= cantidadMeds; i++) {
+                        System.out.println("Medicamento #" + i + ":");
+                        String nombre = leerTexto("  Nombre comercial: ");
+                        String principio = leerTexto("  Código principio activo: ");
+                        String grupo = leerTexto("  Grupo farmacológico: ");
+                        String dosis = leerTexto("  Dosis (ej. 500 mg): ");
+                        String frecuencia = leerTexto("  Frecuencia (ej. Cada 8 horas): ");
+
+                        modelo.Medicamento med = new modelo.Medicamento(nombre, principio, grupo, dosis, frecuencia);
+                        nuevaReceta.agregarMedicamento(med);
+                    }
+
+                    atencionModulo.emitirReceta(idAtencion, nuevaReceta);
+                }
+                case 5 -> {
+                    String idAtencion = leerTexto("Ingrese ID de la atención cuya receta desea anular: ");
+                    atencionModulo.anularReceta(idAtencion);
+                }
+                case 6 -> {
+                    String idAtencion = leerTexto("Ingrese ID de la atención a cerrar: ");
+                    String diagnostico = leerTexto("Ingrese el diagnóstico final obligatorio: ");
+                    atencionModulo.cerrarAtencionConAlta(idAtencion, diagnostico, null);
+                }
+                case 0 -> System.out.println("Volviendo al menú principal...");
+                default -> System.out.println("Opción no válida.");
+            }
+        } while (subOpcion != 0);
     }
 
     private static void mostrarEstadoGlobal() {
