@@ -1,14 +1,18 @@
 package negocio.modulo;
 
+import modelo.Alergia;
 import modelo.Paciente;
 import modelo.SignosVitales;
 import modelo.enums.NivelManchester;
 import negocio.Hospital;
 import negocio.Validador;
 
+import java.util.HashSet;
+import java.util.Set;
+
 public class TriajeModulo {
 
-    //Validación de tipos de sangre
+    // Validación de tipos de sangre
     public boolean esTipoSangreValido(String tipoSangre) {
         if (!Validador.esTextoValido(tipoSangre)) {
             return false;
@@ -22,8 +26,6 @@ public class TriajeModulo {
 
     // --- RF1.1: Gestión CRUD de Pacientes ---
     public boolean registrarPaciente(Paciente nuevoPaciente) {
-        //Validar los datos del paciente y que no exista ya en Hospital.pacientes
-        //Si eso se cumple, se agrega a la lista de Hospital
         if (nuevoPaciente == null) {
             return false;
         }
@@ -41,6 +43,23 @@ public class TriajeModulo {
             }
         }
 
+        // Validar que las alergias registradas no tengan campos vacíos ni principios activos duplicados
+        if (nuevoPaciente.getAlergias() != null && !nuevoPaciente.getAlergias().isEmpty()) {
+            Set<String> principiosRegistrados = new HashSet<>();
+            for (Alergia alergia : nuevoPaciente.getAlergias()) {
+                if (alergia == null
+                        || !Validador.esTextoValido(alergia.getNombreSustancia())
+                        || !Validador.esTextoValido(alergia.getCodigoPrincipioActivo())
+                        || !Validador.esTextoValido(alergia.getGrupoFarmacologico())) {
+                    return false;
+                }
+                String codigoNormalizado = alergia.getCodigoPrincipioActivo().trim().toUpperCase();
+                if (!principiosRegistrados.add(codigoNormalizado)) {
+                    return false;
+                }
+            }
+        }
+
         if (!Validador.esTextoValido(nuevoPaciente.getAntecedentes())) {
             nuevoPaciente.setAntecedentes("Ninguno");
         }
@@ -50,8 +69,7 @@ public class TriajeModulo {
     }
 
     public Paciente buscarPacientePorCedula(String cedula) {
-        //Busca y retorna un paciente activo por su cédula
-        if (!Validador.esCedulaValida(cedula)) {
+        if (Hospital.pacientes.isEmpty() || !Validador.esCedulaValida(cedula)) {
             return null;
         }
 
@@ -66,8 +84,7 @@ public class TriajeModulo {
     }
 
     public boolean actualizarPaciente(String cedula, String nuevosAntecedentes) {
-        //Actualiza los antecedentes del paciente si existe
-        if (!Validador.esTextoValido(nuevosAntecedentes)) {
+        if (Hospital.pacientes.isEmpty() || !Validador.esTextoValido(nuevosAntecedentes)) {
             return false;
         }
 
@@ -81,7 +98,10 @@ public class TriajeModulo {
     }
 
     public boolean darDeBajaPaciente(String cedula) {
-        //Marca un paciente como inactivo y lo quita de colaPrioridadTriaje.
+        if (Hospital.pacientes.isEmpty()) {
+            return false;
+        }
+
         Paciente pacienteBaja = buscarPacientePorCedula(cedula);
 
         if (pacienteBaja == null) {
@@ -93,7 +113,7 @@ public class TriajeModulo {
         return true;
     }
 
-    //Validacion de signos vitales dentro de rangos biológicos
+    // Validación de signos vitales dentro de rangos biológicos
     public boolean sonSignosValidos(SignosVitales signos) {
         if (signos == null) {
             return false;
@@ -105,17 +125,13 @@ public class TriajeModulo {
                 Validador.estaEnRango(signos.getFrecuenciaRespiratoria(), 4, 60) &&
                 Validador.estaEnRango(signos.getPresionSistolica(), 40, 260) &&
                 Validador.estaEnRango(signos.getPresionDiastolica(), 20, 160) &&
-                signos.getPresionSistolica() > signos.getPresionDiastolica() && //la presion sistólica siempre es mayor a la diastólica
+                signos.getPresionSistolica() > signos.getPresionDiastolica() &&
                 Validador.estaEnRango(signos.getNivelDolorEva(), 1, 10);
     }
 
-
     // --- RF1.2: Triaje Automático Manchester (Regla de Negocio) ---
     public NivelManchester evaluarYClasificarTriaje(Paciente paciente, SignosVitales signos) {
-        // Se aplican las reglas del triaje por signos vitales (SpO2, FC, PAS, PAD, Temp, EVA),
-        // se asignan paciente.setSignosVitales(signos), paciente.setNivelManchester(nivel)
-        // y se pone en cola de prioridad en Hospital.colaPrioridadTriaje.
-        if (paciente == null || !sonSignosValidos(signos) || !paciente.isActivo()) {
+        if (Hospital.pacientes.isEmpty() || paciente == null || !sonSignosValidos(signos) || !paciente.isActivo()) {
             return null;
         }
 
@@ -128,13 +144,6 @@ public class TriajeModulo {
         int eva = signos.getNivelDolorEva();
 
         NivelManchester nivelAsignado;
-
-        // Clasificación basada en:
-        //   - Protocolo de Triaje Manchester (dolor EVA y temperatura)
-        //   - Escala de alerta temprana NEWS2 (SpO2, FC, FR y PAS)
-        //   - Guías AHA para crisis hipertensiva (PAD)
-        // Se evalúa de mayor a menor gravedad (ROJO -> AZUL),
-        // basta con que un solo parámetro sea crítico para asignar ese nivel de urgencia
 
         if (spO2 < 90.0 || temp < 34.0 || temp > 41.0 || fC <= 40 || fC >= 140 || fR <= 8 || fR >= 30
                 || paS <= 80 || paS >= 220 || paD <= 40 || paD >= 130) {
@@ -159,8 +168,6 @@ public class TriajeModulo {
         paciente.setSignosVitales(signos);
         paciente.setNivelManchester(nivelAsignado);
 
-        // Si el paciente ya estaba en cola (reevaluación), lo quitamos y volvemos a meter
-        // para que la PriorityQueue recalcule su posición sin duplicarlo
         Hospital.colaPrioridadTriaje.remove(paciente);
         Hospital.colaPrioridadTriaje.add(paciente);
 

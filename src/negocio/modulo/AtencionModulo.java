@@ -11,20 +11,30 @@ import java.util.List;
 
 public class AtencionModulo {
 
-    private final CuartoModulo cuartoModulo = new CuartoModulo();
-
     // 1. Iniciar atención médica (vincula paciente, médico y cuarto)
     public AtencionMedica iniciarAtencion(String id, Paciente p, PersonalMedico m, Cuarto c) {
         if (!Validador.esTextoValido(id) || p == null || m == null || c == null) {
             System.out.println("Error: Datos incompletos para iniciar la atención médica.");
             return null;
         }
+        if (!p.isActivo()) {
+            System.out.println("Error: El paciente seleccionado se encuentra inactivo.");
+            return null;
+        }
+        for (AtencionMedica a : Hospital.atenciones) {
+            if (a.getPaciente() != null
+                    && a.getPaciente().getCedula().equals(p.getCedula())
+                    && "EN_CURSO".equalsIgnoreCase(a.getEstadoAtencion())) {
+                System.out.println("Error: El paciente ya tiene una atención médica EN_CURSO.");
+                return null;
+            }
+        }
         if (buscarAtencionPorId(id) != null) {
             System.out.println("Error: Ya existe una atención registrada con el ID " + id + ".");
             return null;
         }
-        if (m.getEstado() != EstadoMedico.DISPONIBLE) {
-            System.out.println("Error: El médico seleccionado no se encuentra DISPONIBLE.");
+        if (!m.isActivo() || m.getEstado() != EstadoMedico.DISPONIBLE) {
+            System.out.println("Error: El médico seleccionado no se encuentra activo o DISPONIBLE.");
             return null;
         }
         if (c.getEstado() != EstadoCuarto.DISPONIBLE) {
@@ -52,7 +62,6 @@ public class AtencionModulo {
     }
 
     // 2. Validar contraindicaciones de receta contra las alergias del paciente
-    // Retorna true si la receta es SEGURA; retorna false y bloquea si detecta alergia.
     public boolean validarContraindicaciones(Paciente p, Receta r) {
         if (p == null || r == null || r.getMedicamentos() == null) {
             return false;
@@ -64,7 +73,13 @@ public class AtencionModulo {
         }
 
         for (Medicamento med : r.getMedicamentos()) {
+            if (med == null) {
+                continue;
+            }
             for (Alergia alergia : alergiasPaciente) {
+                if (alergia == null) {
+                    continue;
+                }
                 boolean coincideNombre = Validador.esTextoValido(med.getNombreComercial())
                         && Validador.esTextoValido(alergia.getNombreSustancia())
                         && med.getNombreComercial().equalsIgnoreCase(alergia.getNombreSustancia());
@@ -201,7 +216,6 @@ public class AtencionModulo {
             atencion.getCuarto().setPacienteAsignado(null);
             atencion.getCuarto().setEstado(EstadoCuarto.EN_DESINFECCION);
             atencion.getCuarto().setInicioDesinfeccion(LocalDateTime.now());
-            cuartoModulo.iniciarDesinfeccion(atencion.getCuarto().getCodigo());
         }
 
         System.out.println("Diagnóstico guardado. Atención cerrada exitosamente con Alta Médica.");
@@ -212,7 +226,7 @@ public class AtencionModulo {
     public Paciente buscarPacientePorCedula(String cedula) {
         if (!Validador.esTextoValido(cedula)) return null;
         for (Paciente p : Hospital.pacientes) {
-            if (p.getCedula().equals(cedula.trim())) {
+            if (p.getCedula().equals(cedula.trim()) && p.isActivo()) {
                 return p;
             }
         }
