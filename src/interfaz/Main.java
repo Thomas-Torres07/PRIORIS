@@ -654,7 +654,8 @@ public class Main {
                                     + " | Paciente: " + a.getPaciente().getNombreCompleto()
                                     + " | Médico: " + a.getMedico().getNombreCompleto()
                                     + " | Estado: " + a.getEstadoAtencion()
-                                    + " | Diagnóstico: " + (a.getDiagnostico() != null ? a.getDiagnostico() : "Pendiente"));
+                                    + " | Diagnóstico: " + (a.getDiagnostico() != null ? a.getDiagnostico() : "Pendiente")
+                                    + "\n   Notas de evolución: " + (a.getNotasEvolucion() != null ? a.getNotasEvolucion() : "Sin notas registradas"));
                         }
                     }
                 }
