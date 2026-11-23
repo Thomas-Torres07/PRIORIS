@@ -3,35 +3,167 @@ package negocio.modulo;
 import modelo.Paciente;
 import modelo.SignosVitales;
 import modelo.enums.NivelManchester;
+import negocio.Hospital;
+import negocio.Validador;
 
 public class TriajeModulo {
 
+    //Validación de tipos de sangre
+    public boolean esTipoSangreValido(String tipoSangre) {
+        if (!Validador.esTextoValido(tipoSangre)) {
+            return false;
+        }
+        String tipo = tipoSangre.trim().toUpperCase();
+        return tipo.equals("A+") || tipo.equals("A-")
+                || tipo.equals("B+") || tipo.equals("B-")
+                || tipo.equals("AB+") || tipo.equals("AB-")
+                || tipo.equals("O+") || tipo.equals("O-");
+    }
+
     // --- RF1.1: Gestión CRUD de Pacientes ---
     public boolean registrarPaciente(Paciente nuevoPaciente) {
-        // (Joaquín): Validar que no exista la cédula en HospitalDataStore.pacientes y agregarlo.
-        return false;
+        //Validar los datos del paciente y que no exista ya en Hospital.pacientes
+        //Si eso se cumple, se agrega a la lista de Hospital
+        if (nuevoPaciente == null) {
+            return false;
+        }
+
+        if (!Validador.esCedulaValida(nuevoPaciente.getCedula())
+                || !Validador.esTextoValido(nuevoPaciente.getNombreCompleto())
+                || !Validador.estaEnRango(nuevoPaciente.getEdad(), 0, 120)
+                || !esTipoSangreValido(nuevoPaciente.getTipoSangre())) {
+            return false;
+        }
+
+        for (Paciente pacienteExistente : Hospital.pacientes) {
+            if (pacienteExistente.getCedula().equals(nuevoPaciente.getCedula())) {
+                return false;
+            }
+        }
+
+        if (!Validador.esTextoValido(nuevoPaciente.getAntecedentes())) {
+            nuevoPaciente.setAntecedentes("Ninguno");
+        }
+
+        Hospital.pacientes.add(nuevoPaciente);
+        return true;
     }
 
     public Paciente buscarPacientePorCedula(String cedula) {
-        // (Joaquín): Buscar y retornar el paciente activo por cédula.
+        //Busca y retorna un paciente activo por su cédula
+        if (!Validador.esCedulaValida(cedula)) {
+            return null;
+        }
+
+        String cedulaLimpia = cedula.trim();
+        for (Paciente pacienteActual : Hospital.pacientes) {
+            if (pacienteActual.getCedula().equals(cedulaLimpia) && pacienteActual.isActivo()) {
+                return pacienteActual;
+            }
+        }
+
         return null;
     }
 
     public boolean actualizarPaciente(String cedula, String nuevosAntecedentes) {
-        // (Joaquín): Actualizar datos del paciente si existe.
-        return false;
+        //Actualiza los antecedentes del paciente si existe
+        if (!Validador.esTextoValido(nuevosAntecedentes)) {
+            return false;
+        }
+
+        Paciente pacienteActualizar = buscarPacientePorCedula(cedula);
+        if (pacienteActualizar == null) {
+            return false;
+        }
+
+        pacienteActualizar.setAntecedentes(nuevosAntecedentes.trim());
+        return true;
     }
 
     public boolean darDeBajaPaciente(String cedula) {
-        // (Joaquín): Marcar paciente.setActivo(false) y remover de colaPrioridadTriaje.
-        return false;
+        //Marca un paciente como inactivo y lo quita de colaPrioridadTriaje.
+        Paciente pacienteBaja = buscarPacientePorCedula(cedula);
+
+        if (pacienteBaja == null) {
+            return false;
+        }
+
+        pacienteBaja.setActivo(false);
+        Hospital.colaPrioridadTriaje.remove(pacienteBaja);
+        return true;
     }
+
+    //Validacion de signos vitales dentro de rangos biológicos
+    public boolean sonSignosValidos(SignosVitales signos) {
+        if (signos == null) {
+            return false;
+        }
+
+        return Validador.estaEnRango(signos.getSaturacionOxigeno(), 50.0, 100.0) &&
+                Validador.estaEnRango(signos.getTemperatura(), 30.0, 43.0) &&
+                Validador.estaEnRango(signos.getFrecuenciaCardiaca(), 20, 250) &&
+                Validador.estaEnRango(signos.getFrecuenciaRespiratoria(), 4, 60) &&
+                Validador.estaEnRango(signos.getPresionSistolica(), 40, 260) &&
+                Validador.estaEnRango(signos.getPresionDiastolica(), 20, 160) &&
+                signos.getPresionSistolica() > signos.getPresionDiastolica() && //la presion sistólica siempre es mayor a la diastólica
+                Validador.estaEnRango(signos.getNivelDolorEva(), 1, 10);
+    }
+
 
     // --- RF1.2: Triaje Automático Manchester (Regla de Negocio) ---
     public NivelManchester evaluarYClasificarTriaje(Paciente paciente, SignosVitales signos) {
-        // (Joaquín): Aplicar las reglas clínicas del documento (SpO2, FC, PAS, Temp, EVA),
-        // asignar paciente.setSignosVitales(signos), paciente.setNivelManchester(nivel)
-        // y encolar en HospitalDataStore.colaPrioridadTriaje.
-        return NivelManchester.VERDE;
+        // Se aplican las reglas del triaje por signos vitales (SpO2, FC, PAS, PAD, Temp, EVA),
+        // se asignan paciente.setSignosVitales(signos), paciente.setNivelManchester(nivel)
+        // y se pone en cola de prioridad en Hospital.colaPrioridadTriaje.
+        if (paciente == null || !sonSignosValidos(signos) || !paciente.isActivo()) {
+            return null;
+        }
+
+        double spO2 = signos.getSaturacionOxigeno();
+        double temp = signos.getTemperatura();
+        int fC = signos.getFrecuenciaCardiaca();
+        int fR = signos.getFrecuenciaRespiratoria();
+        int paS = signos.getPresionSistolica();
+        int paD = signos.getPresionDiastolica();
+        int eva = signos.getNivelDolorEva();
+
+        NivelManchester nivelAsignado;
+
+        // Clasificación basada en:
+        //   - Protocolo de Triaje Manchester (dolor EVA y temperatura)
+        //   - Escala de alerta temprana NEWS2 (SpO2, FC, FR y PAS)
+        //   - Guías AHA para crisis hipertensiva (PAD)
+        // Se evalúa de mayor a menor gravedad (ROJO -> AZUL),
+        // basta con que un solo parámetro sea crítico para asignar ese nivel de urgencia
+
+        if (spO2 < 90.0 || temp < 34.0 || temp > 41.0 || fC <= 40 || fC >= 140 || fR <= 8 || fR >= 30
+                || paS <= 80 || paS >= 220 || paD <= 40 || paD >= 130) {
+            nivelAsignado = NivelManchester.ROJO;
+
+        } else if (spO2 <= 91.0 || temp <= 35.0 || temp >= 39.5 || fC <= 50 || fC >= 131 || fR <= 10 || fR >= 25
+                || paS <= 90 || paS >= 180 || paD <= 50 || paD >= 120 || eva >= 8) {
+            nivelAsignado = NivelManchester.NARANJA;
+
+        } else if (spO2 <= 93.0 || temp >= 38.5 || fC >= 111 || fR >= 21
+                || paS <= 100 || paS >= 150 || paD >= 100 || eva >= 5) {
+            nivelAsignado = NivelManchester.AMARILLO;
+
+        } else if (spO2 <= 95.0 || temp >= 37.5 || temp <= 36.0 || fC >= 91
+                || paS <= 110 || paD >= 90 || eva >= 3) {
+            nivelAsignado = NivelManchester.VERDE;
+
+        } else {
+            nivelAsignado = NivelManchester.AZUL;
+        }
+
+        paciente.setSignosVitales(signos);
+        paciente.setNivelManchester(nivelAsignado);
+
+        // Si el paciente ya estaba en cola (reevaluación), lo quitamos y volvemos a meter
+        // para que la PriorityQueue recalcule su posición sin duplicarlo
+        Hospital.colaPrioridadTriaje.remove(paciente);
+        Hospital.colaPrioridadTriaje.add(paciente);
+
+        return nivelAsignado;
     }
 }
