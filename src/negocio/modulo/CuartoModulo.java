@@ -4,7 +4,7 @@ import modelo.Cuarto;
 import modelo.Paciente;
 import modelo.enums.EstadoCuarto;
 import negocio.Hospital;
-
+import negocio.Validador;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
@@ -13,6 +13,17 @@ public class CuartoModulo {
 
     // --- RF2.1: Gestión CRUD de Cuartos ---
     public boolean registrarCuarto(Cuarto nuevoCuarto) {
+        if (nuevoCuarto == null ||
+                !Validador.esTextoValido(nuevoCuarto.getCodigo()) ||
+                !Validador.esTextoValido(nuevoCuarto.getTipoArea()) ||
+                !Validador.esTextoValido(nuevoCuarto.getEquipamiento())) {
+            System.out.println("Error: Ningún campo del cuarto puede estar vacío.");
+            return false;
+        }
+        if (!Validador.esPositivo(nuevoCuarto.getTiempoDesinfeccionMinutos())) {
+            System.out.println("Error: El tiempo de desinfección debe ser mayor a 0 minutos.");
+            return false;
+        }
         if (nuevoCuarto == null || nuevoCuarto.getCodigo() == null || nuevoCuarto.getCodigo().trim().isEmpty()) {
             return false;
         }
@@ -41,6 +52,7 @@ public class CuartoModulo {
     }
 
     public boolean eliminarCuarto(String codigo) {
+        if (!Validador.esTextoValido(codigo)) return false;
         for (Cuarto cuarto : Hospital.cuartos) {
             if (cuarto.getCodigo().equalsIgnoreCase(codigo) && cuarto.getEstado() != EstadoCuarto.OCUPADO) {
                 Hospital.cuartos.remove(cuarto);
@@ -52,6 +64,7 @@ public class CuartoModulo {
 
     // --- RF2.2: Control de Estados y Doble Validación de Desinfección ---
     public boolean asignarPacienteACuarto(String codigoCuarto, Paciente paciente) {
+        if (!Validador.esTextoValido(codigoCuarto)) return false;
         if (paciente == null || codigoCuarto == null) {
             return false;
         }
